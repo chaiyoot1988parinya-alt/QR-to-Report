@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>รายงานปัญหาการผลิต( နေ့စဉ်ထုတ်လုပ်မှုပြဿနာအစီရင်ခံစနစ် )</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f9f9f9; }
+    label { display: block; margin-top: 10px; }
+    input, select, button { width: 100%; padding: 8px; margin-top: 5px; }
+    .result { margin-top: 20px; background: #eef; padding: 10px; border-radius: 5px; }
+    ul { list-style: none; padding: 0; margin: 0; background: #fff; border: 1px solid #ccc; max-height: 150px; overflow-y: auto; }
+    li { padding: 5px; cursor: pointer; }
+    li:hover { background: #def; }
+  </style>
+</head>
+<body>
+  <h2>ระบบรายงานปัญหาการผลิต</h2>
+
+  <label>เลขที่จ๊อบ(အလုပ်အကိုင်အမှတ်)</label>
+  <input type="text" id="partInput" placeholder="กรอกหรือเลือก JobNo." />
+  <ul id="partResults"></ul>
+
+  <div class="result">
+    <p><strong>รหัสงาน(အပိုင်းနံပါတ်)</strong> <span id="jobCode">-</span></p>
+    <p><strong>ชื่องาน(အပိုင်းအမည်)</strong> <span id="jobName">-</span></p>
+    <p><strong>จำนวน(ပမာဏ)</strong> <span id="quantity">-</span></p>
+  </div>
+
+  <label>ปัญหาที่พบ(ကြုံတွေ့ခဲ့ရသောပြဿနာများ)</label>
+  <select id="problemSelect"></select>
+
+  <label>สาเหตุที่เกิดปัญหา(ပြဿနာရဲ့ အကြောင်းရင်း)</label>
+  <div id="causeContainer">
+    <select id="causeSelect"></select>
+  </div>
+
+  <label>เครื่องจักรที่ผลิต(စက်နံပါတ်)</label>
+  <input type="text" id="machineNo" />
+
+  <label>แผนก(ဌာန)</label>
+  <select id="departmentSelect"></select>
+
+  <label>ผู้แจ้งปัญหา(သတင်းထောက်)</label>
+  <input type="text" id="reporterName" />
+
+  <button onclick="submitReport()">แจ้งปัญหา ပြဿနာတစ်ခုကို အစီရင်ခံပါ</button>
+
+
+    <script>
+  const baseURL = "https://script.google.com/macros/s/AKfycbzStvvUm8f0u9gOl4VKZEn28ubylAvtlcQCnewhS2RZCl8nSg_pLaUYggK8lAG50QftAQ/exec";
+  const partURL = `${baseURL}?mode=partList`;
+  const detailURL = `${baseURL}?mode=detail`;
+  const causeURL = `${baseURL}?mode=cause`;
+  const departmentURL = `${baseURL}?mode=department`;
+  const submitURL = baseURL;
+
+
+    let jobs = [];
+    let causeMap = {};
+
+    // โหลด Part List
+    fetch(partURL)
+      .then(res => res.json())
+      .then(data => {
+        jobs = data;
+        const input = document.getElementById("partInput");
+        const results = document.getElementById("partResults");
+
+        input.addEventListener("input", function () {
+          const keyword = this.value.toLowerCase();
+          results.innerHTML = "";
+          jobs.filter(p => p.toLowerCase().includes(keyword)).forEach(p => {
+            const li = document.createElement("li");
+            li.textContent = p;
+            li.onclick = () => {
+              input.value = p;
+              results.innerHTML = "";
+              loadJobDetails(p);
+            };
+            results.appendChild(li);
+          });
+        });
+      });
+
+    // โหลดรายละเอียดจาก DT
+    function loadJobDetails(partId) {
+      fetch(`${detailURL}&partId=${partId}`)
+        .then(res => res.json())
+        .then(data => {
+          document.getElementById("jobCode").textContent = data.jobCode;
+          document.getElementById("jobName").textContent = data.jobName;
+          document.getElementById("quantity").textContent = data.quantity;
+        });
+    }
+
+    // โหลดปัญหาและสาเหตุ
+    fetch(causeURL)
+      .then(res => res.json())
+      .then(data => {
+        causeMap = data;
+        const problemSelect = document.getElementById("problemSelect");
+        Object.keys(data).forEach(problem => {
+          const option = document.createElement("option");
+          option.value = problem;
+          option.textContent = problem;
+          problemSelect.appendChild(option);
+        });
+
+        problemSelect.addEventListener("change", updateCauseField);
+        updateCauseField(); // โหลดครั้งแรก
+      });
+
+    // อัปเดตช่องสาเหตุ
+    function updateCauseField() {
+      const selected = document.getElementById("problemSelect").value;
+      const container = document.getElementById("causeContainer");
+      container.innerHTML = "";
+
+      const causes = causeMap[selected];
+
+      if (causes && causes.length === 1 && causes[0] === "กรุณาคีย์ข้อมูลด้วยตนเอง") {
+        const input = document.createElement("input");
+        input.type = "text";
+        input.id = "causeSelect";
+        input.placeholder = "กรุณาระบุสาเหตุที่เกิดปัญหา";
+        container.appendChild(input);
+      } else {
+        const select = document.createElement("select");
+        select.id = "causeSelect";
+        causes.forEach(cause => {
+          const option = document.createElement("option");
+          option.value = cause;
+          option.textContent = cause;
+          select.appendChild(option);
+        });
+        container.appendChild(select);
+      }
+    }
+
+    // โหลดแผนกจาก DPD!C
+    fetch(departmentURL)
+      .then(res => res.json())
+      .then(departments => {
+        const select = document.getElementById("departmentSelect");
+        departments.forEach(dep => {
+          const option = document.createElement("option");
+          option.value = dep;
+          option.textContent = dep;
+          select.appendChild(option);
+        });
+      });
+
+    // ส่งข้อมูลไปยัง Apps Script
+    function submitReport() {
+      const jobNo = document.getElementById("jobCode").textContent;
+      const problem = document.getElementById("problemSelect").value;
+      const causeField = document.getElementById("causeSelect");
+      const cause = causeField ? causeField.value : "";
+      const reporter = document.getElementById("reporterName").value;
+      const department = document.getElementById("departmentSelect").value;
+      const machine = document.getElementById("machineNo").value;
+
+      const payload = new URLSearchParams({
+     mode: "notify", // ✅ เพิ่มตรงนี้ให้ตรง apps script
+        jobNo, problem, cause, reporter, department, machine
+      });
+
+      fetch(submitURL, {
+        method: "POST",
+        body: payload
+      })
+        .then(res => res.text())
+        .then(msg => alert(msg));
+    }
+  </script>
+</body>
+</html>
